@@ -1,4 +1,7 @@
 #include "ContactPlugin.hh"
+#include <gazebo/msgs/contacts.pb.h>
+#include <gazebo/transport/transport.hh>
+#include <gazebo/common/Plugin.hh>
 
 using namespace gazebo;
 GZ_REGISTER_SENSOR_PLUGIN(ContactPlugin)
@@ -6,57 +9,85 @@ GZ_REGISTER_SENSOR_PLUGIN(ContactPlugin)
 /////////////////////////////////////////////////
 ContactPlugin::ContactPlugin() : SensorPlugin()
 {
+  // Initialize ROS 2 if not already done
+  if (!rclcpp::ok())
+  {
+    int argc = 0;
+    char **argv = nullptr;
+    rclcpp::init(argc, argv);
+  }
+
+  // Create node and publisher
+  this->ros_node = std::make_shared<rclcpp::Node>("contact_plugin_node");
+  this->contact_pub =
+      this->ros_node->create_publisher<std_msgs::msg::String>("/contact", 10);
 }
 
 /////////////////////////////////////////////////
 ContactPlugin::~ContactPlugin()
 {
+  rclcpp::shutdown();
 }
 
 /////////////////////////////////////////////////
 void ContactPlugin::Load(sensors::SensorPtr _sensor, sdf::ElementPtr /*_sdf*/)
 {
-  // Get the parent sensor.
   this->parentSensor =
-    std::dynamic_pointer_cast<sensors::ContactSensor>(_sensor);
+      std::dynamic_pointer_cast<sensors::ContactSensor>(_sensor);
 
-  // Make sure the parent sensor is valid.
   if (!this->parentSensor)
   {
     gzerr << "ContactPlugin requires a ContactSensor.\n";
     return;
   }
 
-  // Connect to the sensor update event.
   this->updateConnection = this->parentSensor->ConnectUpdated(
       std::bind(&ContactPlugin::OnUpdate, this));
 
-  // Make sure the parent sensor is active.
   this->parentSensor->SetActive(true);
 }
 
 /////////////////////////////////////////////////
 void ContactPlugin::OnUpdate()
 {
-  // Get all the contacts.
-  msgs::Contacts contacts;
-  contacts = this->parentSensor->Contacts();
+  msgs::Contacts contacts = this->parentSensor->Contacts();
+
   for (unsigned int i = 0; i < contacts.contact_size(); ++i)
   {
-    std::cout << "Collision between[" << contacts.contact(i).collision1()
-              << "] and [" << contacts.contact(i).collision2() << "]\n";
+    std::string collision1 = contacts.contact(i).collision1();
+    std::string collision2 = contacts.contact(i).collision2();
 
-    for (unsigned int j = 0; j < contacts.contact(i).position_size(); ++j)
+    // Extract model and link names from "model::link::collision"
+    auto parse_name = [](const std::string &s) {
+      std::vector<std::string> parts;
+      std::stringstream ss(s);
+      std::string item;
+      while (std::getline(ss, item, ':'))
+      {
+        if (!item.empty())
+          parts.push_back(item);
+      }
+      return parts;
+    };
+
+    auto p1 = parse_name(collision1);
+    auto p2 = parse_name(collision2);
+
+    if (p1.size() >= 2 && p2.size() >= 2)
     {
-      std::cout << j << "  Position:"
-                << contacts.contact(i).position(j).x() << " "
-                << contacts.contact(i).position(j).y() << " "
-                << contacts.contact(i).position(j).z() << "\n";
-      std::cout << "   Normal:"
-                << contacts.contact(i).normal(j).x() << " "
-                << contacts.contact(i).normal(j).y() << " "
-                << contacts.contact(i).normal(j).z() << "\n";
-      std::cout << "   Depth:" << contacts.contact(i).depth(j) << "\n";
+      std::string model1 = p1[0];
+      std::string link1 = p1[1];
+      std::string model2 = p2[0];
+      std::string link2 = p2[1];
+
+      std_msgs::msg::String msg;
+      msg.data = "model1_name: " + model1 + ", link1_name: " + link1 +
+                 ", model2_name: " + model2 + ", link2_name: " + link2;
+
+      this->contact_pub->publish(msg);
     }
   }
+
+  // Optional: spin node to process callbacks
+  rclcpp::spin_some(this->ros_node);
 }

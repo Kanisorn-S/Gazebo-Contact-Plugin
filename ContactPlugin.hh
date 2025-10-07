@@ -2,35 +2,34 @@
 #define _GAZEBO_CONTACT_PLUGIN_HH_
 
 #include <string>
+#include <memory>
 
 #include <gazebo/gazebo.hh>
 #include <gazebo/sensors/sensors.hh>
+#include <rclcpp/rclcpp.hpp>
+#include <std_msgs/msg/string.hpp>
 
 namespace gazebo
 {
-  /// \brief An example plugin for a contact sensor.
+  /// \brief A plugin for a contact sensor that publishes contact info to ROS 2.
   class ContactPlugin : public SensorPlugin
   {
-    /// \brief Constructor.
-    public: ContactPlugin();
+  public:
+    ContactPlugin();
+    virtual ~ContactPlugin();
 
-    /// \brief Destructor.
-    public: virtual ~ContactPlugin();
+    void Load(sensors::SensorPtr _sensor, sdf::ElementPtr _sdf) override;
 
-    /// \brief Load the sensor plugin.
-    /// \param[in] _sensor Pointer to the sensor that loaded this plugin.
-    /// \param[in] _sdf SDF element that describes the plugin.
-    public: virtual void Load(sensors::SensorPtr _sensor, sdf::ElementPtr _sdf);
+  private:
+    void OnUpdate();
 
-    /// \brief Callback that receives the contact sensor's update signal.
-    private: virtual void OnUpdate();
+    sensors::ContactSensorPtr parentSensor;
+    event::ConnectionPtr updateConnection;
 
-    /// \brief Pointer to the contact sensor
-    private: sensors::ContactSensorPtr parentSensor;
-
-    /// \brief Connection that maintains a link between the contact sensor's
-    /// updated signal and the OnUpdate callback.
-    private: event::ConnectionPtr updateConnection;
+    // ROS 2 node and publisher
+    rclcpp::Node::SharedPtr ros_node;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr contact_pub;
   };
 }
+
 #endif
