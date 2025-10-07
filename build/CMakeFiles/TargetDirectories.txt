@@ -1,3 +1,0 @@
-/home/final-project/gazebo_contact_tutorial/build/CMakeFiles/contact.dir
-/home/final-project/gazebo_contact_tutorial/build/CMakeFiles/edit_cache.dir
-/home/final-project/gazebo_contact_tutorial/build/CMakeFiles/rebuild_cache.dir
